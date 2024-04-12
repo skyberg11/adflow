@@ -1,0 +1,36 @@
+Request: curl -X GET 84.201.137.195/api/main/ads/1 - Получить объявление с ID 123
+Response: {"data":null,"error":"BadRequest"}
+
+Request: curl -X POST 84.201.137.195/api/main/users -d '{
+    "first_name":"John",
+    "second_name":"Doe",
+    "nickname": "john03",
+    "password": "abacaba",
+    "email":"john.doe@example.com",
+    "phone":"1234567890"
+    }' - Создать нового пользователя
+Response: {"data":{"first_name":"John","second_name":"Doe","email":"john.doe@example.com","phone":"1234567890","user_id":1},"error":null}
+
+
+Request: curl -X POST 84.201.137.195/api/main/users -d '{
+    "first_name":"John",
+    "second_name":"Doe",
+    "nickname": "john03",
+    "password": "abacaba",
+    "email":"john.doe@example.com",
+    "phone":"1234567890"
+    }' - Создать нового пользователя
+Response: {"data":{"first_name":"John","second_name":"Doe","email":"john.doe@example.com","phone":"1234567890","user_id":1},"error":null}
+
+
+Request: curl -X POST 84.201.137.195/api/main/users/login -d '{
+    "nickname":"john03",
+    "password":"abacaba"
+    }' - Войти в систему
+Response: {"error":null,"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzA4NDc4MTE2fQ._jui4BP43Ov_u_qJ7pg7f0cD-hfoAMaN4DWU1pelUbI"}
+
+Request: curl -H "Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZXhwIjoxNzA4NDc4MTE2fQ._jui4BP43Ov_u_qJ7pg7f0cD-hfoAMaN4DWU1pelUbI"
+-X POST 84.201.137.195/api/main/ads -d '{"title":"New Ad","text":"This is a new ad","user_id":1}' - Создать новое объявление
+Response:{"data":{"id":1,"title":"New Ad","text":"This is a new ad","author_id":1,"published":false,"creation_time":"2024-02-21T01:15:08.643893926Z","update_time":"2024-02-21T01:15:08.643894006Z"},"error":null}
+
+Остальные запросы были протестированы в тестах.

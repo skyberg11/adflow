@@ -1,0 +1,197 @@
+package tests
+
+import (
+	"context"
+	"net"
+	"testing"
+	"time"
+
+	"adflow/internal/adapters/adrepo"
+	"adflow/internal/adapters/aduser"
+	grpcApp "adflow/internal/ports/grpc/app"
+	grpcPort "adflow/internal/ports/grpc/service"
+
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
+)
+
+func initServer(t *testing.T) (grpcPort.AdServiceClient, context.Context) {
+	lis := bufconn.Listen(1024 * 1024)
+	t.Cleanup(func() {
+		lis.Close()
+	})
+
+	srv := grpc.NewServer()
+	t.Cleanup(func() {
+		srv.Stop()
+	})
+
+	// svc := grpcPort.NewService(app.NewApp(adrepo.New()))
+	// grpcPort.RegisterAdServiceServer(srv, svc)
+	grpcPort.RegisterAdServiceServer(srv, grpcApp.NewAdService(adrepo.New(), aduser.New()))
+	go func() {
+		assert.NoError(t, srv.Serve(lis), "srv.Serve")
+	}()
+
+	dialer := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(func() {
+		cancel()
+	})
+
+	conn, err := grpc.DialContext(ctx, "", grpc.WithContextDialer(dialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	assert.NoError(t, err, "grpc.DialContext")
+
+	t.Cleanup(func() {
+		conn.Close()
+	})
+	return grpcPort.NewAdServiceClient(conn), ctx
+}
+
+func TestGRPCCreateAd(t *testing.T) {
+	client, ctx := initServer(t)
+	_, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+	res, err := client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg", Text: "abacaba@aba.ru", UserId: int64(0)})
+	assert.NoError(t, err)
+
+	assert.Equal(t, "Oleg", res.Title)
+}
+
+func TestGRPCGetAd(t *testing.T) {
+	client, ctx := initServer(t)
+	_, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+	_, err = client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg", Text: "abacaba@aba.ru", UserId: int64(0)})
+	assert.NoError(t, err)
+
+	res, err := client.GetAd(ctx, &grpcPort.GetAdRequest{Id: int64(0)})
+	assert.NoError(t, err)
+	assert.Equal(t, "Oleg", res.Title)
+}
+
+func TestGRPCChangeAdStatus(t *testing.T) {
+	client, ctx := initServer(t)
+	user, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+	response, err := client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg", Text: "abacaba@aba.ru", UserId: int64(0)})
+	assert.NoError(t, err)
+
+	response, err = client.ChangeAdStatus(ctx, &grpcPort.ChangeAdStatusRequest{AdId: response.Id, UserId: user.Id, Published: true})
+	assert.NoError(t, err)
+	assert.True(t, response.Published)
+
+	response, err = client.ChangeAdStatus(ctx, &grpcPort.ChangeAdStatusRequest{AdId: response.Id, UserId: user.Id, Published: false})
+	assert.NoError(t, err)
+	assert.False(t, response.Published)
+}
+
+func TestGRPCUpdateAd(t *testing.T) {
+	client, ctx := initServer(t)
+	user, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+	response, err := client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg", Text: "abacaba@aba.ru", UserId: int64(0)})
+	assert.NoError(t, err)
+	assert.Equal(t, response.Title, "Oleg")
+	assert.Equal(t, response.Text, "abacaba@aba.ru")
+
+	response, err = client.UpdateAd(ctx, &grpcPort.UpdateAdRequest{AdId: response.Id, UserId: user.Id, Title: "new", Text: "new text"})
+	assert.NoError(t, err)
+	assert.Equal(t, response.Title, "new")
+	assert.Equal(t, response.Text, "new text")
+}
+
+func TestGRPCListAds(t *testing.T) {
+	client, ctx := initServer(t)
+
+	user, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+
+	response, err := client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg", Text: "abacaba@aba.ru", UserId: int64(0)})
+	assert.NoError(t, err)
+
+	response, err = client.ChangeAdStatus(ctx, &grpcPort.ChangeAdStatusRequest{AdId: response.Id, UserId: user.Id, Published: true})
+	assert.NoError(t, err)
+	assert.True(t, response.Published)
+
+	_, err = client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg2", Text: "abacaba@aba.ru2", UserId: int64(0)})
+	assert.NoError(t, err)
+
+	ads, err := client.ListAds(ctx, &grpcPort.Filter{Published: "1"})
+
+	assert.NoError(t, err)
+	assert.Len(t, ads.List, 1)
+	assert.Equal(t, ads.List[0].Id, response.Id)
+	assert.Equal(t, ads.List[0].Title, response.Title)
+	assert.Equal(t, ads.List[0].Text, response.Text)
+	assert.Equal(t, ads.List[0].AuthorId, response.AuthorId)
+	assert.True(t, ads.List[0].Published)
+}
+
+func TestGRPCCreateUser(t *testing.T) {
+	client, ctx := initServer(t)
+	res, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+
+	assert.Equal(t, "Oleg", res.Name)
+}
+
+func TestGRPCGetUser(t *testing.T) {
+	client, ctx := initServer(t)
+	_, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+
+	_, err = client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg2", Email: "abacaba2@aba.ru"})
+	assert.NoError(t, err)
+
+	res, err := client.GetUser(ctx, &grpcPort.GetUserRequest{Id: int64(0)})
+	assert.NoError(t, err)
+	assert.Equal(t, "Oleg", res.Name)
+
+	res, err = client.GetUser(ctx, &grpcPort.GetUserRequest{Id: int64(1)})
+	assert.NoError(t, err)
+	assert.Equal(t, "Oleg2", res.Name)
+}
+
+func TestGRPCDeleteUser(t *testing.T) {
+	client, ctx := initServer(t)
+	user1, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+
+	user2, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg2", Email: "abacaba2@aba.ru"})
+	assert.NoError(t, err)
+
+	_, err = client.DeleteUser(ctx, &grpcPort.DeleteUserRequest{Id: user1.Id})
+	assert.NoError(t, err)
+
+	_, _ = client.GetUser(ctx, &grpcPort.GetUserRequest{Id: int64(0)})
+	assert.Error(t, ErrBadRequest)
+
+	res, err := client.GetUser(ctx, &grpcPort.GetUserRequest{Id: user2.Id})
+	assert.NoError(t, err)
+	assert.Equal(t, "Oleg2", res.Name)
+}
+
+func TestGRPCDeleteAd(t *testing.T) {
+	client, ctx := initServer(t)
+	user1, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg", Email: "abacaba@aba.ru"})
+	assert.NoError(t, err)
+
+	response, err := client.CreateAd(ctx, &grpcPort.CreateAdRequest{Title: "Oleg", Text: "abacaba@aba.ru", UserId: int64(0)})
+	assert.NoError(t, err)
+
+	user2, err := client.CreateUser(ctx, &grpcPort.CreateUserRequest{Name: "Oleg2", Email: "abacaba2@aba.ru"})
+	assert.NoError(t, err)
+
+	_, err = client.DeleteAd(ctx, &grpcPort.DeleteAdRequest{AdId: response.Id, AuthorId: user1.Id})
+	assert.NoError(t, err)
+
+	_, err = client.DeleteAd(ctx, &grpcPort.DeleteAdRequest{AdId: response.Id, AuthorId: user2.Id})
+	assert.Error(t, err)
+
+}

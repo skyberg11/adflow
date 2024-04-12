@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  backend:
+    build:
+      context: .
+    ports:
+      - 127.0.0.1:8000:8080
+    environment:
+      - AUTH_SIGNING_KEY=mmy_secret
+      - DB_URI_USERS=api_users.db
+      - DB_URI_ADS=api_ads.db
+    restart: unless-stopped
+  nginx:
+    build:
+      context: ./nginx/
+    ports:
+      - 80:80
+    restart: unless-stopped

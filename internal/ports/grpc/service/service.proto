@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package ad;
+option go_package = "adflow/internal/ports/grpc";
+import "google/protobuf/empty.proto";
+
+service AdService {
+  rpc CreateAd(CreateAdRequest) returns (AdResponse) {}
+  rpc GetAd(GetAdRequest) returns (AdResponse) {}
+  rpc ChangeAdStatus(ChangeAdStatusRequest) returns (AdResponse) {}
+  rpc UpdateAd(UpdateAdRequest) returns (AdResponse) {}
+  rpc ListAds(Filter) returns (ListAdResponse) {}
+  rpc CreateUser(CreateUserRequest) returns (UserResponse) {}
+  rpc GetUser(GetUserRequest) returns (UserResponse) {}
+  rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty) {}
+  rpc DeleteAd(DeleteAdRequest) returns (google.protobuf.Empty) {}
+}
+
+message CreateAdRequest {
+  string title = 1;
+  string text = 2;
+  int64 user_id = 3;
+}
+
+message Filter{
+  string published=1;
+  string author_id=2;
+  string prefix=3;
+  string creation_time=4;
+}
+
+message ChangeAdStatusRequest {
+  int64 ad_id = 1;
+  int64 user_id = 2;
+  bool published = 3;
+}
+
+message UpdateAdRequest {
+  int64 ad_id = 1;
+  int64 user_id = 2;
+  string title = 3;
+  string text = 4;
+} 
+
+message AdResponse {
+  int64 id = 1;
+  string title = 2;
+  string text = 3;
+  int64 author_id = 4;
+  bool published = 5;
+  string CreationDate = 6;
+  string UpdateDate=7;
+}
+
+message ListAdResponse {
+  repeated AdResponse list = 1;
+}
+
+message CreateUserRequest {
+  string first_name = 1;
+  string second_name = 2;
+  string nickname = 3;
+  string password = 4;
+  string email = 5;
+  string phone = 6;
+}
+
+message UserResponse {
+  int64 id = 1;
+  string first_name = 2;
+  string second_name = 3;
+  string email = 4;
+  string phone = 5;
+}
+
+message GetUserRequest {
+  int64 id = 1;
+}
+
+message GetAdRequest {
+  int64 id = 1;
+}
+
+message DeleteUserRequest {
+  int64 id = 1;
+  int64 user_id = 2;
+}
+
+message DeleteAdRequest {
+  int64 ad_id = 1;
+  int64 author_id = 2;
+}
